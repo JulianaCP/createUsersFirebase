@@ -40,6 +40,7 @@ import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
 
 import java.util.ArrayList;
+import java.util.Hashtable;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
@@ -64,6 +65,7 @@ public class MainActivity extends AppCompatActivity {
     Persona persona;
     String clave;
     Uri UriResult;
+    boolean editar;
 
     private static final int IMAGE_CAPTURE = 12;
     @Override
@@ -80,6 +82,11 @@ public class MainActivity extends AppCompatActivity {
 
         buttonFoto = (Button) findViewById(R.id.photo);
         buttonGuardar = (Button) findViewById(R.id.save);
+
+
+        editTextCorreo.setText("jcp@hotmail.com");
+        editTextNombre.setText("ffff");
+        editTextPassword.setText("fsfsdf");
 
         buttonGuardar.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -129,23 +136,27 @@ public class MainActivity extends AppCompatActivity {
                             persona.setContraseña(contraseña);
                             persona.setNombre(nombre);
                             myRef.push().setValue(persona);
-
+                            editar = false;
                             obtenerClave();
-                            upLoad();
-                            limpiarPantalla();
 
-                            Toast.makeText(getApplicationContext(),"Exito",Toast.LENGTH_SHORT).show();
+
+                            //Toast.makeText(getApplicationContext(),"Exito",Toast.LENGTH_SHORT).show();
 
                         } else {
-                            String errorCode = ((FirebaseAuthException) task.getException()).getErrorCode();
+                            try{
+                                String errorCode = ((FirebaseAuthException) task.getException()).getErrorCode();
 
-                            switch (errorCode) {
-                                case "ERROR_EMAIL_ALREADY_IN_USE":
-                                    System.out.println("error correo");
-                                    obtenerClave();
-                                    mensajeConfirmacion();
-                                    break;
+                                switch (errorCode) {
+                                    case "ERROR_EMAIL_ALREADY_IN_USE":
+                                        System.out.println("error correo");
+                                        editar = true;
+                                        mensajeConfirmacion();
+                                        break;
+                                }
+                            }catch (Exception e){
+                                System.out.println("error en el else de error code");
                             }
+                            System.out.println("task.getException():  " + task.getException());
                             //Toast.makeText(getApplicationContext(),"Fallo: " + task.getException(),Toast.LENGTH_SHORT).show();
                         }
 
@@ -162,8 +173,6 @@ public class MainActivity extends AppCompatActivity {
                 .setPositiveButton("Aceptar", new DialogInterface.OnClickListener()  {
                     public void onClick(DialogInterface dialog, int id) {
                         obtenerClave();
-                        remplazarInfo();
-                        limpiarPantalla();
                     }
                 })
                 .setNegativeButton("Cancelar", new DialogInterface.OnClickListener() {
@@ -172,54 +181,76 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }).create().show();
     }
-    public void obtenerClave(){
+    public void obtenerClave() {
+        System.out.println("obtenerClave");
+        database = FirebaseDatabase.getInstance();
+        myRef = database.getReference("Persona");
 
-        AsyncTask<Void,Void, Boolean> processAsync= new AsyncTask<Void, Void, Boolean>() {
-            ProgressDialog mDialog= new ProgressDialog(MainActivity.this);
+        ValueEventListener postListener = new ValueEventListener() {
             @Override
-            protected void onPreExecute() {
-                mDialog.setMessage("Loading..");
-                mDialog.show();
-            }
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                for(DataSnapshot postSnapshot: dataSnapshot.getChildren()){
+                    Persona user = postSnapshot.getValue(Persona.class);
+                    System.out.println("correos en lista: " + user.getCorreo());
+                    if(user.getCorreo().equals(correo)){
+                        clave = postSnapshot.getKey();
+                        System.out.println("obtener key: " + clave);
 
-            @Override
-            protected Boolean doInBackground(Void... params) {
-                database = FirebaseDatabase.getInstance();
-                myRef = database.getReference("Persona");
-                ValueEventListener postListener = new ValueEventListener() {
-                    @Override
-                    public void onDataChange(DataSnapshot dataSnapshot) {
-                        for(DataSnapshot postSnapshot: dataSnapshot.getChildren()){
-                            Persona user = postSnapshot.getValue(Persona.class);
-                            System.out.println("correos en lista: " + user.getCorreo());
-                            if(user.getCorreo().equals(correo)){
-                                clave = postSnapshot.getKey();
-                                System.out.println("obtener key: " + clave);
-                                break;
-                            }
+                        if(editar == true){
+                            remplazarInfo();
+                            limpiarPantalla();
                         }
-                        System.out.println("salio");
-                    }
+                        else{
+                            upLoad();
+                            limpiarPantalla();
+                        }
 
-                    @Override
-                    public void onCancelled(DatabaseError databaseError) {
-                        // Getting Post failed, log a message
-                        Log.w("Nada", "loadPost:onCancelled", databaseError.toException());
-                        // ...
+                        break;
                     }
-                };
-
-                myRef.addValueEventListener(postListener);
-                return true;
+                }
             }
-            @Override
-            protected void onPostExecute(Boolean result) {
-                super.onPostExecute(result);
-                mDialog.dismiss();
 
-            };
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+                // Getting Post failed, log a message
+                Log.w("Nada", "loadPost:onCancelled", databaseError.toException());
+                // ...
+            }
         };
-        processAsync.execute();
+
+        myRef.addValueEventListener(postListener);
+
+    }
+    String pathFoto;
+    public void obtenerPath() {
+
+        database = FirebaseDatabase.getInstance();
+        myRef = database.getReference("FotosPath");
+
+        ValueEventListener postListener = new ValueEventListener() {
+
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                for(DataSnapshot postSnapshot: dataSnapshot.getChildren()){
+                    Fotos fotos = postSnapshot.getValue(Fotos.class);
+                    if(fotos.getCorreo().equals(correo)){
+                        pathFoto = fotos.getPath();
+                    }
+                }
+                System.out.println("obtenerPath: uploead -> arriba");
+                upLoad();
+            }
+
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+                // Getting Post failed, log a message
+                Log.w("Nada", "loadPost:onCancelled", databaseError.toException());
+                // ...
+            }
+
+        };
+
+        myRef.addListenerForSingleValueEvent(postListener);
 
     }
     public void remplazarInfo(){
@@ -232,7 +263,8 @@ public class MainActivity extends AppCompatActivity {
         persona.setNombre(nombre);
         myRef.child(clave).setValue(persona);
 
-        upLoad();
+        obtenerPath();
+
     }
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -262,14 +294,21 @@ public class MainActivity extends AppCompatActivity {
         StorageReference storageReference =
                 storageRef.getReferenceFromUrl("gs://auth-aa0a8.appspot.com");
 
-        Uri fileUri = UriResult;
+        final Uri fileUri = UriResult;
 
-        System.out.println("clave foto: " + clave );
-        System.out.println("uriResult: " + UriResult);
-        System.out.println("fileUri.getLastPathSegment(): "  +fileUri.getLastPathSegment());
+
+
+        if(editar == true){
+            final StorageReference ddd = storageReference.child("photos")
+                    .child(correo).child(pathFoto);
+            ddd.delete();
+
+        }
+
 
         final StorageReference photoReference = storageReference.child("photos")
                 .child(correo).child(fileUri.getLastPathSegment());
+
 
 
         photoReference.putFile(fileUri)
@@ -277,8 +316,16 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onSuccess(UploadTask.TaskSnapshot taskSnapshot) {
                         Uri downloadUrl = taskSnapshot.getDownloadUrl();
+                        database = FirebaseDatabase.getInstance();
+                        myRef = database.getReference("FotosPath");
+
+                        Fotos foto = new Fotos();
+                        foto.setCorreo(correo);
+                        foto.setPath(fileUri.getLastPathSegment());
+                        myRef.push().setValue(foto);
                     }
                 })
+
                 .addOnFailureListener(new OnFailureListener() {
                     @Override
                     public void onFailure(@NonNull Exception exception) {
@@ -287,5 +334,4 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
     }
-
 }
